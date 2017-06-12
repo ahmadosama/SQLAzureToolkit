@@ -56,11 +56,7 @@ function Create-AzureResourceGroup
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 		    
 		$e = Get-AzureRmResourceGroup -Name $resourcegroupname -Location $location -ErrorAction SilentlyContinue -ErrorVariable rgerror
 		if($e -ne $null)
@@ -112,12 +108,7 @@ function Create-AzureSQLServer
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
-    
+		
 		#create azure sql server if it doesn't exits
 		$f = Get-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable checkserver
     
@@ -133,7 +124,14 @@ function Create-AzureSQLServer
 		{ 
 			#create a sql server
 			Write-host "Provisioning Azure SQL Server $azuresqlservername ... " -ForegroundColor Green
-			$c=New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force))
+			$c=New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force)) -ErrorAction SilentlyContinue -ErrorVariable createerror
+            if($createerror -ne $null)
+            {
+                Write-Host $createerror -ForegroundColor Red
+                
+                return;
+            }
+
 			Write-host "$azuresqlservername provisioned." -ForegroundColor Green
 		}
 
@@ -172,11 +170,7 @@ function Set-AzureSQLServerFireWallRule
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 
         $d= Get-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable frerror
         
@@ -244,14 +238,10 @@ function Create-AzureSQLDatabase
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 
 		#Create Azure Resource Group
-		Create-AzureResourceGroup -AzureProfilePath $AzureProfilePath -resourcegroupname $resourcegroupname -location $location
+		Create-AzureResourceGroup -AzureProfilePath $AzureProfilePath -resourcegroupname $resourcegroupname -location $location 
 	
 		#Create Azure SQL Server
 		Create-AzureSQLServer -AzureProfilePath $AzureProfilePath -azuresqlservername $azuresqlservername -resourcegroupname $resourcegroupname -login $login -password $password -location $location
@@ -273,16 +263,23 @@ function Create-AzureSQLDatabase
 			Write-Host "Provisioning $databasename..." -ForegroundColor Green
 			if([string]::IsNullOrEmpty($elasticpool) -eq $true)
 			{
-				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier
+				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ErrorAction SilentlyContinue -ErrorVariable dberror
 			}
 			else
 			{
-				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ElasticPoolName $elasticpool 
+				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ElasticPoolName $elasticpool -ErrorAction SilentlyContinue -ErrorVariable dberror
 			}
+			                       
+            if($dberror -eq $null)
+	    	{
+                Write-host "$databasename provisioned." -ForegroundColor Green
+            }else
+            {
+                Write-Host $dberror -ForegroundColor Red
+            }
 	
 		}
 
-		Write-host "$databasename provisioned." -ForegroundColor Green
 	}
 	catch
 	{
@@ -314,12 +311,7 @@ function Delete-AzureSQLDatabase
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
-
+		
 		$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable dberror
 		if($dberror -ne $null)
 		{
@@ -361,11 +353,7 @@ function Delete-AzureSQLServer
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 
 		$f = Get-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable checkserver
 		
@@ -414,12 +402,7 @@ function Delete-AzureSQLServerFirewallRule
 
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
-
+		
         $d= Get-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable frerror
         
 		if($frerror -ne $null)
@@ -461,11 +444,7 @@ function Delete-AzureResourceGroup
 	{
 		#get current Azure context
 		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 		    
 		$e = Get-AzureRmResourceGroup -Name $resourcegroupname -Location $location -ErrorAction SilentlyContinue -ErrorVariable rgerror
 		if($rgerror -ne $null)
