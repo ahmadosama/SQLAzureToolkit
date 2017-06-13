@@ -1,3 +1,39 @@
+function fn_executeprocess
+{
+	param
+	(
+		[string]$filename, 
+		[string]$arg,
+		[string]$workingdir,
+		[bool]$wait=$true
+	)
+	$pinfo = New-Object System.Diagnostics.ProcessStartInfo
+	$pinfo.FileName = $filename
+	$pinfo.RedirectStandardError = $true
+	$pinfo.RedirectStandardOutput = $true
+	$pinfo.UseShellExecute = $false
+	$pinfo.Arguments = $arg
+	$pinfo.WorkingDirectory = $workingdir
+	$pinfo.CreateNoWindow = $true
+	$p = New-Object System.Diagnostics.Process
+	$p.StartInfo = $pinfo
+	$p.Start() | Out-Null
+	if($wait)
+	{
+		$p.WaitForExit()
+	}
+	$stdout = $p.StandardOutput.ReadToEnd()
+	$stderr = $p.StandardError.ReadToEnd()
+	Write-Host $stdout
+	if($stderr -ne $null)
+	{
+		Write-Host $stderr -ForegroundColor Red
+	}
+	#Write-Host "stdout: $stdout"
+	#Write-Host "stderr: $stderr"
+	#Write-Host "exit code: " + $p.ExitCode
+}
+
 <#
 	Set-AzureProfile
 	Set the azure profile under which the objects are to be created
@@ -103,9 +139,7 @@ function Create-AzureSQLServer
 	    [Parameter(Mandatory=$true)]
         [string]$password,
 	    [Parameter(Mandatory=$true)]
-        [string]$location,
-        [string]$startip,
-        [string]$endip
+        [string]$location
         )
 
 	Try
@@ -170,13 +204,7 @@ function Set-AzureSQLServerFireWallRule
 	
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		
 
         $d= Get-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable frerror
         
@@ -487,3 +515,371 @@ function Delete-AzureResourceGroup
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}
 }
+
+
+<#
+	Create-AzureStorageAccount
+	Create Azure Storage Account
+#>
+function Create-AzureStorageAccount
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$true)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$true)]
+		[string]$location,
+		[Parameter(Mandatory=$false)]
+		[string]$skuname="Standard_LRS"
+
+	)
+
+	$sa = Get-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -ErrorAction SilentlyContinue -ErrorVariable saerror
+	if($sa -ne $null)
+	{
+		Write-Host "The storage account $storageaccountname already exists in resource group $resourcegroupname" -ForegroundColor red
+		#Storage Account Exists. Do Nothing.
+	}
+	if($saerror -ne $null)
+	{
+		$sacname = Get-AzureRmStorageAccountNameAvailability -Name $storageaccountname
+		if($sacname.NameAvailable -eq $false)
+		{
+			Write-Host $sacname.Message ": Please provide a different Azure Storage Account Name" -ForegroundColor Red
+			Return;
+		}
+		Write-Host "Provisioning Storage Account $storageaccountname" -ForegroundColor Green
+		#Storage Account Doesn't exists. Create a new one.
+		$newsa = New-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -SkuName $skuname -Location $location -ErrorAction SilentlyContinue -ErrorVariable newsaerror
+		if($newsaerror -ne $null)
+		{
+			#error in creating storage account
+			Write-Host $newsaerror -ForegroundColor Red
+			return;
+		}
+		if($newsa -ne $null)
+		{
+			Write-Host $newsa;
+		}
+	}
+
+}
+
+<#
+	Create-AzureStorageContainer
+	Create Azure Storage Container
+#>
+function Create-AzureStorageContainer
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$true)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$true)]
+		[string]$containername,
+		[Parameter(Mandatory=$false)]
+		[string]$permission="Off"
+
+	)
+	
+	#Set the current storage account
+	Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+
+	$sac = New-AzureStorageContainer -Name $containername -Permission $permission -ErrorAction SilentlyContinue -ErrorVariable sacerror
+
+	if($sac -ne $null)
+	{
+		Write-Host "Container $containername successfully created" -ForegroundColor Green
+		
+	}
+	if($sacerror -ne $null)
+	{
+		Write-Host $sacerror -ForegroundColor Red
+	}
+
+
+}
+
+<#
+	Create-AzureStorageContainer
+	Create Azure Storage Container
+#>
+function Delete-AzureStorageAccount
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$true)]
+		[string]$resourcegroupname
+		
+	)
+
+	$sa = Get-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -ErrorAction SilentlyContinue -ErrorVariable saerror
+	if($saerror -ne $null)
+	{
+		Write-Host $saerror -ForegroundColor Red
+	}
+
+	if($sa -ne $null)
+	{
+		#Write-Host "The storage account $storageaccountname already exists in resource group $resourcegroupname" -ForegroundColor red
+		#Storage Account Exists. Delete.
+		$rma = Remove-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -ErrorAction SilentlyContinue -ErrorVariable rmerror
+		if($rma -ne $null)
+		{
+			Write-Host $rma -ForegroundColor Green
+		}
+		if($rmerror -ne $null)
+		{
+			Write-Host $rmerror
+		}
+	}
+
+}
+
+<#
+	Delete-AzureStorageContainer
+	Delete Azure Storage Container
+#>
+function Delete-AzureStorageContainer
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$true)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$true)]
+		[string]$containername
+
+	)
+	
+	#Set the current storage account
+	Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+
+	$sac = Remove-AzureStorageContainer -Name $containername -ErrorAction SilentlyContinue -ErrorVariable sacerror
+
+	if($sac -ne $null)
+	{
+		Write-Host "$containername successfully deleted" -ForegroundColor Green
+		
+	}
+	if($sacerror -ne $null)
+	{
+		Write-Host $sacerror -ForegroundColor Red
+	}
+
+
+}
+
+
+<#
+	UploadBlob-AzureStorageContainer
+	Upload file to Azure Storage Container
+#>
+function UploadBlob-AzureStorageContainer
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$true)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$true)]
+		[string]$containername,
+		[Parameter(Mandatory=$true)]
+		[string]$file,
+		[Parameter(Mandatory=$false)]
+		[string]$directory,
+		[Parameter(Mandatory=$false)]
+		[string]$blobname
+
+	)
+	
+	Try
+	{
+		#Set the current storage account
+		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+
+		#upload blob to Azure Storage Container
+		if([string]::IsNullOrEmpty($file) -eq $false)
+		{
+			Set-AzureStorageBlobContent -File $file -Container $containername -Blob $blobname
+		}
+		if([string]::IsNullOrEmpty($directory) -eq $false)
+		{
+			ls –Recurse -Path $directory | Set-AzureStorageBlobContent -Container $containername -Force
+		}
+		
+	}
+	catch
+	{
+		$ErrorMessage = $_.Exception.Message
+	    $FailedItem = $_.Exception.ItemName
+		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
+	}	
+
+}
+
+
+<#
+	Backup-AzureSQLDatabase
+	Backup Azure SQL Database -bacpac,dacpac,csv export
+	This can also backup on premise sql server
+#>
+Function Backup-AzureSQLDatabase
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$type=$null, #bacpac,dacpac,CSV,export
+		[Parameter(Mandatory=$false)]
+		[string]$backupdirectory,
+		[Parameter(Mandatory=$false)]
+		[string]$sqlpackagepath,
+		[Parameter(Mandatory=$true)]
+		[string]$sqlserver,
+		[Parameter(Mandatory=$true)]
+		[string]$database,
+		[Parameter(Mandatory=$true)]
+		[string]$sqluser,
+		[Parameter(Mandatory=$true)]
+		[string]$sqlpassword,
+		[Parameter(Mandatory=$false)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$false)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$false)]
+		[string]$container
+		
+	)
+	if([string]::IsNullOrEmpty($type) -eq $true)
+	{
+		Write-Host "Enter a valid backup type(bacpac/dacpac/csv)" -ForegroundColor Red
+		return;
+	}
+
+	if($type -eq "bacpac")
+	{
+		Write-Host "Creating bacpac file at $backupdirectory" -ForegroundColor Green
+		$backuppath = $backupdirectory + "/" + "$database.bacpac"
+		$action = "Export"
+		$arg = "/Action:Export /ssn:$sqlserver /sdn:$database /su:$sqluser /sp:$sqlpassword /tf:$backuppath"
+		fn_executeprocess -filename $sqlpackagepath -arg $arg
+	}
+
+	if($type -eq "dacpac")
+	{
+		Write-Host "Creating dacpac file at $backupdirectory" -ForegroundColor Green
+		$backuppath = $backupdirectory + "/" + "$database.dacpac"
+		#$log = $backupdirectory + "/" + "$database.log"
+		$arg = "/Action:Extract /ssn:$sqlserver /sdn:$database /su:$sqluser /sp:$sqlpassword /tf:$backuppath"
+		fn_executeprocess -filename $sqlpackagepath -arg $arg
+		
+	}
+
+
+	if($type -eq "csv")
+	{
+		# include smo assembly
+		[reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.Smo") | out-null
+
+		# Create the data directory
+		$datadirectory = $backupdirectory + "\data"
+		New-Item -ItemType Directory -Force -Path $datadirectory
+
+		$azuresqluser = $sqluser + "@" + $sqlserver.Split('.')[0]
+		# connect to Azure SQL Database
+		$cn = "Server=$sqlserver;Database=$database;User ID=$azuresqluser;Password=$sqlpassword"
+		$conn = New-Object System.Data.SqlClient.SqlConnection
+		$conn.ConnectionString = $cn
+
+		# smo server object
+		$azsrv = New-Object ("Microsoft.SqlServer.Management.Smo.Server") $conn
+		# smo database object
+		$azdb = $azsrv.Databases[$database]
+
+		# execute the query to get all user tables and save results in a data source object
+		$dataset=$azdb.ExecuteWithResults("select ss.name + '.' + st.name from sys.tables st join sys.schemas ss on st.schema_id=ss.schema_id");
+
+		#bcp out each table in $dataset
+		Foreach ($table in $dataset.Tables)
+		{
+			# loop through each row in a table
+			Foreach ($row in $table.Rows)
+			{
+				# loop through every column in a table
+				Foreach ($col in $table.Columns)
+				{
+					$outtable = $database + "." + $row.Item($col)
+					$outfile = $datadirectory + $row.Item($col) + ".dat"
+    
+					# export source table data to .dat file
+					Write-Host "Bcp out $outtable in $outfile"
+					bcp $outtable out "$outfile" -U $azuresqluser -P $sqlpassword -S tcp:$sqlserver -E -n -C RAW
+					
+                }
+			}
+		} 
+
+	}
+
+	if($type -eq "export")
+	{
+		if([string]::IsNullOrEmpty($storageaccountname) -eq $true)
+		{
+			Write-Host "Provide a valid Storage Account Name" -ForegroundColor Red
+			return
+		}
+		if([string]::IsNullOrEmpty($resourcegroupname) -eq $true)
+		{
+			Write-Host "Provide a valid resource group" -ForegroundColor Red
+			return
+		}
+		if([string]::IsNullOrEmpty($container) -eq $true)
+		{
+			Write-Host "Provide a valid Storage Container Name" -ForegroundColor Red
+			return
+		}
+		
+		# add timestamp to the bacpac file
+		$bacpacFilename = $DatabaseName + (Get-Date).ToString("ddMMyyyymm") + ".bacpac"
+
+		# set the current storage account
+		$storageaccountkey = Get-AzureRmStorageAccountKey -ResourceGroupName $resourcegroupname -Name $storageaccountname
+		
+		# set the bacpac location
+		$bloblocation = "https://$storageaccountname.blob.core.windows.net/$container/$bacpacFilename"
+		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+		#set the credential
+		$securesqlpassword = ConvertTo-SecureString -String $sqlpassword -AsPlainText -Force
+		$credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqluser, $securesqlpassword
+
+		Write-Host "Exporting $database to $bloblocation..." -ForegroundColor Green
+		$export = New-AzureRmSqlDatabaseExport -ResourceGroupName $resourcegroupname -ServerName $sqlserver `
+		-DatabaseName $database -StorageUri $bloblocation -AdministratorLogin $credentials.UserName `
+		-AdministratorLoginPassword $credentials.Password -StorageKeyType StorageAccessKey -StorageKey $storageaccountkey.Value[0].Tostring()
+
+		Write-Host $export -ForegroundColor Green
+
+		# Check status of the export
+		While(1 -eq 1)
+		{
+			$exportstatus = Get-AzureRmSqlDatabaseImportExportStatus -OperationStatusLink $export.OperationStatusLink
+			if($exportstatus.Status -eq "Succeeded")
+			{
+				Write-Host $exportstatus.StatusMessage -ForegroundColor Green
+				return
+			}
+			If($exportstatus.Status -eq "InProgress")
+			{
+				Write-Host $exportstatus.StatusMessage -ForegroundColor Green
+				Start-Sleep -Seconds 5
+			}
+		}
+		
+		}
+	
+	
+
+}
+
