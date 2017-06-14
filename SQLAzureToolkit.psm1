@@ -825,6 +825,7 @@ Function Backup-AzureSQLDatabase
 
 	if($type -eq "export")
 	{
+		
 		if([string]::IsNullOrEmpty($storageaccountname) -eq $true)
 		{
 			Write-Host "Provide a valid Storage Account Name" -ForegroundColor Red
@@ -855,7 +856,7 @@ Function Backup-AzureSQLDatabase
 		$credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqluser, $securesqlpassword
 
 		Write-Host "Exporting $database to $bloblocation..." -ForegroundColor Green
-		$export = New-AzureRmSqlDatabaseExport -ResourceGroupName $resourcegroupname -ServerName $sqlserver `
+		$export = New-AzureRmSqlDatabaseExport -ResourceGroupName $resourcegroupname -ServerName $sqlserver.Split('.')[0] `
 		-DatabaseName $database -StorageUri $bloblocation -AdministratorLogin $credentials.UserName `
 		-AdministratorLoginPassword $credentials.Password -StorageKeyType StorageAccessKey -StorageKey $storageaccountkey.Value[0].Tostring()
 
@@ -877,9 +878,7 @@ Function Backup-AzureSQLDatabase
 			}
 		}
 		
-		}
-	
-	
+	}	
 
 }
 
