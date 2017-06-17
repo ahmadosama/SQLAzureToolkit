@@ -29,8 +29,8 @@ function fn_executeprocess
 	{
 		Write-Host $stderr -ForegroundColor Red
 	}
-	#Write-Host "stdout: $stdout"
-	#Write-Host "stderr: $stderr"
+	Write-Host "stdout: $stdout"
+	Write-Host "stderr: $stderr"
 	#Write-Host "exit code: " + $p.ExitCode
 }
 
@@ -752,6 +752,12 @@ Function Backup-AzureSQLDatabase
 		[string]$container
 		
 	)
+
+	if($sqlserver.Split('.').Count -le 1)
+	{
+		$sqlserver = "$sqlserver.database.windows.net"
+	}
+
 	if([string]::IsNullOrEmpty($type) -eq $true)
 	{
 		Write-Host "Enter a valid backup type(bacpac/dacpac/csv)" -ForegroundColor Red
@@ -880,5 +886,172 @@ Function Backup-AzureSQLDatabase
 		
 	}	
 
+}
+
+
+<#
+Function Restore-AzureSQLDatabase
+restore azure sql database from bacpac,dacpac,csv, import bacpac from storage account or point in time
+#>
+Function Restore-AzureSQLDatabase
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$type=$null, #bacpac,dacpac,import,csv,pointintime
+		[Parameter(Mandatory=$false)]
+		[string]$backupfile,
+		[Parameter(Mandatory=$false)]
+		[string]$sqlpackagepath,
+		[Parameter(Mandatory=$true)]
+		[string]$sqlserver,
+		[Parameter(Mandatory=$true)]
+		[string]$database,
+		[Parameter(Mandatory=$true)]
+		[string]$sqluser,
+		[Parameter(Mandatory=$true)]
+		[string]$sqlpassword,
+		[Parameter(Mandatory=$false)]
+		[string]$storageaccountname,
+		[Parameter(Mandatory=$false)]
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$false)]
+		[string]$container,
+		[Parameter(Mandatory=$false)]
+		[string]$replace=$false,
+		[Parameter(Mandatory=$false)] #local(onpremise) or azure
+		[string]$sqlservertype="azure",
+		[Parameter(Mandatory=$false)]
+		[string]$serviceobjectivename="P6",
+		[Parameter(Mandatory=$false)] 
+		[string]$edition="Standard",
+		[Parameter(Mandatory=$false)] 
+		[string]$dbmaxsizebytes=1000000000,
+		[Parameter(Mandatory=$false)] 
+		[string]$newdatabasename							
+	)
+
+	$sqlservershortname = $sqlserver.Split('.')[0];
+	$sqlserverlongname = "$sqlservershortname.database.windows.net"
+
+	$sqlservershortname
+	3
+	#Import bacpac from local system
+	if([string]::IsNullOrEmpty($type) -eq $true)
+	{
+		Write-Host "Enter a valid backup type(bacpac/dacpac/csv)" -ForegroundColor Red
+		return;
+	}
+
+	if($replace -eq $true -and $sqlservertype -eq "azure")
+	{
+		#rename the existing database
+		# add the azure account again as the rename cmdlet doens't works in Resource Manager version
+		Add-AzureAccount
+
+		#rename the database 
+		$dboldname = $database + (Get-Date).ToString("MMddyyyymm")
+		Write-Host "Renaming $database to $dboldname"
+		Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $database -NewDatabaseName $dboldname
+		$newdatabasename = $database
+
+	}else
+	{
+		$newdatabasename = "$database_" + (Get-Date).ToString("MMddyyyymm")
+	}
+
+	if($type -eq "bacpac")
+	{
+		$sqlserverlongname
+		#Write-Host "Creating bacpac file at $backupdirectory" -ForegroundColor Green
+		#$backuppath = $backupdirectory + "/" + "$database.bacpac"
+		#$action = "Export"
+		$arg = "/Action:Import /tsn:$sqlserverlongname /tdn:$newdatabasename /tu:$sqluser /tp:$sqlpassword /sf:$backupfile"
+		$arg
+		fn_executeprocess -filename $sqlpackagepath -arg $arg
+	}
+
+	if($type -eq "dacpac")
+	{
+		Write-Host "Importing database $database from $backupfile" -ForegroundColor Green
+		$sqlserver
+		$arg = "/a:publish /sf:$backupfile /tsn:$sqlserverlongname /tdn:$newdatabasename /tu:$sqluser /tp:$sqlpassword"
+		fn_executeprocess -filename $sqlpackagepath -arg $arg
+	}
+
+	if($type -eq "import")
+	{
+		# set the current storage account
+		$storageaccountkey = Get-AzureRmStorageAccountKey -ResourceGroupName $resourcegroupname -Name $storageaccountname
+		
+		# set the bacpac location	
+		$bloblocation = "https://$storageaccountname.blob.core.windows.net/$container/$backupfile"
+		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+		#set the credential
+		$securesqlpassword = ConvertTo-SecureString -String $sqlpassword -AsPlainText -Force
+		$credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqluser, $securesqlpassword
+
+		Write-Host "Importing $database from $bloblocation..." -ForegroundColor Green
+		
+		#$import = New-AzureRmSqlDatabaseImport -ResourceGroupName $resourcegroupname -ServerName $sqlserver.Split('.')[0] `
+		#-DatabaseName $database -StorageUri $bloblocation -AdministratorLogin $credentials.UserName `
+		#-AdministratorLoginPassword $credentials.Password -StorageKeyType StorageAccessKey -StorageKey $storageaccountkey.Value[0].Tostring()
+		$import =  New-AzureRmSqlDatabaseImport -DatabaseName $newdatabasename -ServerName $sqlservershortname -StorageKeyType StorageAccessKey -StorageKey $storageaccountkey.Value[0].Tostring() `
+		-StorageUri $bloblocation -AdministratorLogin $credentials.UserName -AdministratorLoginPassword `
+		$credentials.Password -ResourceGroupName $resourcegroupname -Edition $edition -ServiceObjectiveName $serviceobjectivename -DatabaseMaxSizeBytes $dbmaxsizebytes
+
+		# Check status of the export
+		While(1 -eq 1)
+		{
+			$importstatus = Get-AzureRmSqlDatabaseImportExportStatus -OperationStatusLink $import.OperationStatusLink
+			if($importstatus.Status -eq "Succeeded")
+			{
+				Write-Host $importstatus.StatusMessage -ForegroundColor Green
+				return
+			}
+			If($importstatus.Status -eq "InProgress")
+			{
+				Write-Host $importstatus.StatusMessage -ForegroundColor Green
+
+				Start-Sleep -Seconds 10
+			}
+		}
+	}
+
+	if($type -eq "pointintime")
+	{
+		While (1)
+		{
+			$restoredetails = Get-AzureRmSqlDatabaseRestorePoints -ServerName $sqlservershortname -DatabaseName $database -ResourceGroupName $resourcegroupname
+			$erd=$restoredetails.EarliestRestoreDate.ToString();
+			$restoretime = Read-Host "The earliest restore time is $erd.`n Enter a restore time between Earlist restore time and current time." 
+			$restoretime = $restoretime -as [DateTime]
+			if(!$restoretime)
+			{
+				Write-Host "Enter a valid date" -ForegroundColor Red
+			}else
+			{
+				break;
+			}
+		}
+
+		$db = Get-AzureRmSqlDatabase -DatabaseName $database -ServerName $sqlservershortname -ResourceGroupName $resourcegroupname
+		
+		Write-Host "Restoring Database $database as of $restoretime"
+
+		$restore = Restore-AzureRmSqlDatabase -FromPointInTimeBackup -PointInTime $restoretime -ResourceId $db.ResourceId -ServerName `
+		$db.ServerName -TargetDatabaseName $newdatabasename -Edition $db.Edition -ServiceObjectiveName $db.CurrentServiceObjectiveName `
+		-ResourceGroupName $db.ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable rerror
+		if($rerror -ne $null)
+		{
+			Write-Host $rerror -ForegroundColor red;
+		}
+		if($restore -ne $null)
+		{
+			Write-Host "Database $newdatabasename restored Successfully";
+		}
+
+
+	}
+	
 }
 
