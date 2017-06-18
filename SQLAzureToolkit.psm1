@@ -918,8 +918,6 @@ Function Restore-AzureSQLDatabase
 		[string]$container,
 		[Parameter(Mandatory=$false)]
 		[string]$replace=$false,
-		[Parameter(Mandatory=$false)] #local(onpremise) or azure
-		[string]$sqlservertype="azure",
 		[Parameter(Mandatory=$false)]
 		[string]$serviceobjectivename="P6",
 		[Parameter(Mandatory=$false)] 
@@ -932,31 +930,28 @@ Function Restore-AzureSQLDatabase
 
 	$sqlservershortname = $sqlserver.Split('.')[0];
 	$sqlserverlongname = "$sqlservershortname.database.windows.net"
+	
 
-	$sqlservershortname
-	3
 	#Import bacpac from local system
 	if([string]::IsNullOrEmpty($type) -eq $true)
 	{
 		Write-Host "Enter a valid backup type(bacpac/dacpac/csv)" -ForegroundColor Red
 		return;
 	}
-
-	if($replace -eq $true -and $sqlservertype -eq "azure")
+	
+	$newdatabasename = $database + (Get-Date).ToString("MMddyyyymm")
+	if($replace -eq $true -and $type -ne "pointintime")
 	{
 		#rename the existing database
 		# add the azure account again as the rename cmdlet doens't works in Resource Manager version
 		Add-AzureAccount
 
 		#rename the database 
-		$dboldname = $database + (Get-Date).ToString("MMddyyyymm")
+		
 		Write-Host "Renaming $database to $dboldname"
 		Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $database -NewDatabaseName $dboldname
 		$newdatabasename = $database
 
-	}else
-	{
-		$newdatabasename = "$database_" + (Get-Date).ToString("MMddyyyymm")
 	}
 
 	if($type -eq "bacpac")
@@ -1041,6 +1036,7 @@ Function Restore-AzureSQLDatabase
 		$restore = Restore-AzureRmSqlDatabase -FromPointInTimeBackup -PointInTime $restoretime -ResourceId $db.ResourceId -ServerName `
 		$db.ServerName -TargetDatabaseName $newdatabasename -Edition $db.Edition -ServiceObjectiveName $db.CurrentServiceObjectiveName `
 		-ResourceGroupName $db.ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable rerror
+		
 		if($rerror -ne $null)
 		{
 			Write-Host $rerror -ForegroundColor red;
@@ -1050,6 +1046,16 @@ Function Restore-AzureSQLDatabase
 			Write-Host "Database $newdatabasename restored Successfully";
 		}
 
+		if($replace -eq $true)
+		{
+			Add-AzureAccount
+			$tempdbname = $database + "old"
+			#switch the database name
+			Write-Host "Renaming databases...." 
+			Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $database -NewDatabaseName $tempdbname
+			Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $newdatabasename -NewDatabaseName $database
+			#Delete-AzureSQLDatabase -azuresqlservername $sqlservershortname -resourcegroupname $resourcegroupname -databasename $tempdbname
+		}
 
 	}
 	
