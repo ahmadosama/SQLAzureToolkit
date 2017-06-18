@@ -940,7 +940,7 @@ Function Restore-AzureSQLDatabase
 	}
 	
 	$newdatabasename = $database + (Get-Date).ToString("MMddyyyymm")
-	if($replace -eq $true -and $type -ne "pointintime")
+	if($replace -eq $true -and $type -ne "pointintime" -and $type -ne "deleted")
 	{
 		#rename the existing database
 		# add the azure account again as the rename cmdlet doens't works in Resource Manager version
@@ -1057,6 +1057,37 @@ Function Restore-AzureSQLDatabase
 			#Delete-AzureSQLDatabase -azuresqlservername $sqlservershortname -resourcegroupname $resourcegroupname -databasename $tempdbname
 		}
 
+	}
+
+	if($type -eq "deleted")
+	{
+		if($replace -eq $true)
+		{
+			$newdatabasename=$database;
+		}
+		$deleteddb = Get-AzureRmSqlDeletedDatabaseBackup -ServerName $sqlservershortname -DatabaseName $database -ResourceGroupName $resourcegroupname
+		$deletedatabasename = $deleteddb.DatabaseName.ToString()
+		Write-Host "Restoring database $deletedatabasename from Deleted Database" -ForegroundColor Green
+		$restoredeleted =  Restore-AzureRmSqlDatabase -FromDeletedDatabaseBackup -DeletionDate $deleteddb.DeletionDate -ResourceId $deleteddb.ResourceID `
+		-ServerName $sqlservershortname -TargetDatabaseName $newdatabasename -Edition $deleteddb.Edition -ServiceObjectiveName $deleteddb.ServiceLevelObjective `
+		-ResourceGroupName $resourcegroupname 
+		Write-Host $restoredeleted -ForegroundColor Green
+
+	}
+
+	if($type -eq "geo")
+	{
+		if($replace -eq $true)
+		{
+			$newdatabasename=$database;
+		}
+		$geodb = Get-AzureRmSqlDatabaseGeoBackup -ServerName $sqlservershortname -DatabaseName $database -ResourceGroupName $resourcegroupname
+		$geodtabasename = $geodb.DatabaseName.ToString()
+		Write-Host "Restoring database $geodtabasename from geo backup" -ForegroundColor Green
+		$georestore =  Restore-AzureRmSqlDatabase -FromGeoBackup -ResourceId $geodb.ResourceID -ServerName $sqlservershortname -TargetDatabaseName $newdatabasename `
+		-Edition $geodb.Edition -ResourceGroupName $resourcegroupname -ServiceObjectiveName $serviceobjectivename
+
+		Write-Host $restoredeleted -ForegroundColor Green
 	}
 	
 }
