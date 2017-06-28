@@ -939,21 +939,9 @@ Function Restore-AzureSQLDatabase
 		return;
 	}
 	
+	#set the new database name
 	$newdatabasename = $database + (Get-Date).ToString("MMddyyyymm")
-	if($replace -eq $true -and $type -ne "pointintime" -and $type -ne "deleted")
-	{
-		#rename the existing database
-		# add the azure account again as the rename cmdlet doens't works in Resource Manager version
-		Add-AzureAccount
-
-		#rename the database 
-		
-		Write-Host "Renaming $database to $dboldname"
-		Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $database -NewDatabaseName $dboldname
-		$newdatabasename = $database
-
-	}
-
+	
 	if($type -eq "bacpac")
 	{
 		$sqlserverlongname
@@ -1046,49 +1034,78 @@ Function Restore-AzureSQLDatabase
 			Write-Host "Database $newdatabasename restored Successfully";
 		}
 
-		if($replace -eq $true)
-		{
-			Add-AzureAccount
-			$tempdbname = $database + "old"
-			#switch the database name
-			Write-Host "Renaming databases...." 
-			Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $database -NewDatabaseName $tempdbname
-			Set-AzureSqlDatabase -ServerName $sqlservershortname -DatabaseName $newdatabasename -NewDatabaseName $database
-			#Delete-AzureSQLDatabase -azuresqlservername $sqlservershortname -resourcegroupname $resourcegroupname -databasename $tempdbname
-		}
-
+		
 	}
 
 	if($type -eq "deleted")
 	{
-		if($replace -eq $true)
-		{
-			$newdatabasename=$database;
-		}
+		
 		$deleteddb = Get-AzureRmSqlDeletedDatabaseBackup -ServerName $sqlservershortname -DatabaseName $database -ResourceGroupName $resourcegroupname
 		$deletedatabasename = $deleteddb.DatabaseName.ToString()
 		Write-Host "Restoring database $deletedatabasename from Deleted Database" -ForegroundColor Green
-		$restoredeleted =  Restore-AzureRmSqlDatabase -FromDeletedDatabaseBackup -DeletionDate $deleteddb.DeletionDate -ResourceId $deleteddb.ResourceID `
+		$restore=Restore-AzureRmSqlDatabase -FromDeletedDatabaseBackup -DeletionDate $deleteddb.DeletionDate -ResourceId $deleteddb.ResourceID `
 		-ServerName $sqlservershortname -TargetDatabaseName $newdatabasename -Edition $deleteddb.Edition -ServiceObjectiveName $deleteddb.ServiceLevelObjective `
 		-ResourceGroupName $resourcegroupname 
-		Write-Host $restoredeleted -ForegroundColor Green
-
+		
+		$restoredb = $restore.DatabaseName.ToString()
+		Write-Host "Database $database restored from deleted databases as database $restoredb" -ForegroundColor Green
+		#Write-Host $restoredeleted.ToString() -ForegroundColor Green
+		
 	}
 
 	if($type -eq "geo")
 	{
-		if($replace -eq $true)
-		{
-			$newdatabasename=$database;
-		}
+		
 		$geodb = Get-AzureRmSqlDatabaseGeoBackup -ServerName $sqlservershortname -DatabaseName $database -ResourceGroupName $resourcegroupname
 		$geodtabasename = $geodb.DatabaseName.ToString()
+		
 		Write-Host "Restoring database $geodtabasename from geo backup" -ForegroundColor Green
-		$georestore =  Restore-AzureRmSqlDatabase -FromGeoBackup -ResourceId $geodb.ResourceID -ServerName $sqlservershortname -TargetDatabaseName $newdatabasename `
+		 
+		$restore = Restore-AzureRmSqlDatabase -FromGeoBackup -ResourceId $geodb.ResourceID -ServerName $sqlservershortname -TargetDatabaseName $newdatabasename `
 		-Edition $geodb.Edition -ResourceGroupName $resourcegroupname -ServiceObjectiveName $serviceobjectivename
 
-		Write-Host $restoredeleted -ForegroundColor Green
+		$restoredb = $restore.DatabaseName.ToString()
+		Write-Host "Database $database restored from Geo Backup as database $restoredb" -ForegroundColor Green
+
+		
+	}
+	
+	if($replace -eq $true)
+	{
+		Rename-AzureSQLDatabase -sqlservername $sqlservershortname -databasename $newdatabasename -newdatabasename $database -rgn $resourcegroupname
+	}
+}
+
+function Rename-AzureSQLDatabase
+{
+	param(
+		[string]$sqlservername,
+		[string]$databasename,
+		[string]$newdatabasename,
+		[string]$rgn
+)
+
+	Add-AzureAccount
+	$tempdbname = $database + "old" + (Get-Date).ToString("MMddyyyymmss")
+
+	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $sqlservername -ResourceGroupName $rgn -ErrorAction SilentlyContinue -ErrorVariable dberror
+	$d
+	$dberror
+	return;
+	if($d -eq $null)
+	{
+		#Original database doesn;t exists. Just rename the new database to original database.
+		Write-Host "Renaming database $newdatabasename to $databasename" -ForegroundColor Green
+	
+		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewDatabaseName $databasename
+	}
+	else
+	{
+		#original database exists. Swap the names
+		Write-Host "Renaming database $databasename to $tempdbname" -ForegroundColor Green
+		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $databasename -NewDatabaseName $tempdbname
+		Write-Host "Renaming database $tempdbname to $databasename" -ForegroundColor Green
+		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewDatabaseName $databasename
 	}
 	
 }
-
