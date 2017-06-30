@@ -1072,7 +1072,7 @@ Function Restore-AzureSQLDatabase
 	
 	if($replace -eq $true)
 	{
-		Rename-AzureSQLDatabase -sqlservername $sqlservershortname -databasename $newdatabasename -newdatabasename $database -rgn $resourcegroupname
+		Rename-AzureSQLDatabase -sqlservername $sqlservershortname -databasename $database -newdatabasename $newdatabasename -rgn $resourcegroupname
 	}
 }
 
@@ -1085,13 +1085,13 @@ function Rename-AzureSQLDatabase
 		[string]$rgn
 )
 
-	Add-AzureAccount
+	Add-AzureAccount | Out-Null
 	$tempdbname = $database + "old" + (Get-Date).ToString("MMddyyyymmss")
 
 	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $sqlservername -ResourceGroupName $rgn -ErrorAction SilentlyContinue -ErrorVariable dberror
-	$d
-	$dberror
-	return;
+	Write-Host $d
+	Write-Host $dberror
+	
 	if($d -eq $null)
 	{
 		#Original database doesn;t exists. Just rename the new database to original database.
@@ -1103,8 +1103,11 @@ function Rename-AzureSQLDatabase
 	{
 		#original database exists. Swap the names
 		Write-Host "Renaming database $databasename to $tempdbname" -ForegroundColor Green
-		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $databasename -NewDatabaseName $tempdbname
-		Write-Host "Renaming database $tempdbname to $databasename" -ForegroundColor Green
+		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $databasename -NewDatabaseName $tempdbname 
+
+		Start-Sleep -s 60
+
+		Write-Host "Renaming database $newdatabasename to $databasename" -ForegroundColor Green
 		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewDatabaseName $databasename
 	}
 	
