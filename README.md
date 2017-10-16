@@ -9,7 +9,7 @@ Import-Module SQLAzureToolKit
 Provision a new Azure SQL Database
 
 Create-AzureSQLDatabase -azuresqlservername myazuresqlserver -resourcegroupname myresourcegroup -databasename myazuredb `
--login dpladmin -password Awesome@1234 -location "Southeast Asia"
+-login dpladmin -password password -location "Southeast Asia"
 
 The above powershell command will create a new SQL Azure database myazuredb in Azure SQL Server myazuresqlserver in resource
 group myresourcegroup at location Southeast Asia.
@@ -24,7 +24,7 @@ The above command will create a new Azure Resource group dpl in Southeast Asia i
 
 Provision a new Azure SQL Server 
 
-Create-AzureSQLServer -azuresqlservername dplserver -resourcegroupname dpl -login dpladmin -password Awesome@1234 `
+Create-AzureSQLServer -azuresqlservername dplserver -resourcegroupname dpl -login dpladmin -password password `
 -location "Southeast Asia"
 
 The above command will create a new Azure SQL Server dplserver in resource group dpl at location Southeast Asia, if it doesn't exists.
