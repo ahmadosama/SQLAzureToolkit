@@ -35,6 +35,25 @@ function fn_executeprocess
 }
 
 <#
+Save Azure Profile information into a json file 
+#>
+function Save-AzureProfile
+{
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$AzureProfilePath
+	)
+	Write-Host "Login to your Azure Account" -ForegroundColor Green
+	Login-AzureRmAccount | Save-AzureRmProfile -Path $AzureProfilePath -Force -ErrorVariable errorvar
+	if(!$errorvar)
+	{
+		Write-Host "Azure Profile details saved in $AzureProfilePath. You can now use it to login to Azure PowerShell." -ForegroundColor Green
+
+	}
+
+
+}
+<#
 	Set-AzureProfile
 	Set the azure profile under which the objects are to be created
 #>
@@ -44,24 +63,28 @@ function Set-AzureProfile
     [string]$AzureProfilePath
     )
     
-    #Save your azure profile. This is to avoid entering azure credentials everytime you run a powershell script
-    #This is a json file in text format. If someone gets to this, you are done :)
-
-	Try
+    Try
 	{
-		   if([string]::IsNullOrEmpty($AzureProfilePath))
-		{ 
-			# Log in to your Azure account. Enable this for the first time to get the Azure Credential
-			Login-AzureRmAccount | Out-Null
+		#Login to Azure Account
+		if((Test-Path -Path $AzureProfilePath))
+		{
+			#If Azure profile file is available get the profile information from the file
+		    $profile = Select-AzureRmProfile -Path $AzureProfilePath
+			#retrieve the subscription id from the profile.
+		    $SubscriptionID = $profile.Context.Subscription.SubscriptionId
 		}
 		else
 		{
-			#get profile details from the saved json file
-			#enable if you have a saved profile
-			$profile = Select-AzureRmProfile -Path $AzureProfilePath
-			#Set the Azure Context
-			Set-AzureRmContext -SubscriptionId $profile.Context.Subscription.SubscriptionId 
+		    Write-Host "File Not Found $AzureProfilePath" -ForegroundColor Red
+			
+			# If the Azure Profile file isn't available, login using the dialog box.
+		    # Provide your Azure Credentials in the login dialog box
+		    $profile = Login-AzureRmAccount
+		    $SubscriptionID =  $profile.Context.Subscription.SubscriptionId
 		}
+
+		#Set the Azure Context
+		Set-AzureRmContext -SubscriptionId $SubscriptionID | Out-Null
 	}
 	catch{
 		$ErrorMessage = $_.Exception.Message
@@ -74,7 +97,6 @@ function Set-AzureProfile
 	
 
 <#
-	Create-AzureResourceGroup
 	Create Azure Resource Group if it doesn't exits.
 #>
 function Create-AzureResourceGroup
@@ -87,17 +109,11 @@ function Create-AzureResourceGroup
     [string]$location
     )
 
-    #Configure the Azure Profile
+    #Configure Azure Profile
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
-		    
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
 		$e = Get-AzureRmResourceGroup -Name $resourcegroupname -Location $location -ErrorAction SilentlyContinue -ErrorVariable rgerror
 		if($e -ne $null)
 		{
@@ -108,7 +124,7 @@ function Create-AzureResourceGroup
 		if($rgerror -ne $null)
 		{
 			Write-host "Provisioning Azure Resource Group $resourcegroupname... " -ForegroundColor Green
-			$b=New-AzureRmResourceGroup -Name $resourcegroupname -Location $location
+			New-AzureRmResourceGroup -Name $resourcegroupname -Location $location
 			Write-host "$resourcegroupname provisioned." -ForegroundColor Green
 		}
 	
@@ -144,13 +160,7 @@ function Create-AzureSQLServer
 
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
     
 		#create azure sql server if it doesn't exits
 		$f = Get-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable checkserver
@@ -167,12 +177,14 @@ function Create-AzureSQLServer
 		{ 
 			#create a sql server
 			Write-host "Provisioning Azure SQL Server $azuresqlservername ... " -ForegroundColor Green
-			$c=New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force))
-			Write-host "$azuresqlservername provisioned." -ForegroundColor Green
+			New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force) -ErrorVariable errorvar)
+			<#
+			if(!$errorvar)
+			{
+				Write-host "$azuresqlservername provisioned." -ForegroundColor Green
+			}
+			#>
 		}
-
-		#Set-AzureSQLServerFireWallRule -AzureProfilePath $AzureProfilePath -azuresqlservername $azuresqlservername -resourcegroupname $resourcegroupname -rulename "Home"
-		
 	}
 	catch{
 		$ErrorMessage = $_.Exception.Message
@@ -204,7 +216,7 @@ function Set-AzureSQLServerFireWallRule
 	
 	Try
 	{
-		
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
         $d= Get-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable frerror
         
@@ -270,13 +282,7 @@ function Create-AzureSQLDatabase
 	
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 		#Create Azure Resource Group
 		Create-AzureResourceGroup -AzureProfilePath $AzureProfilePath -resourcegroupname $resourcegroupname -location $location
@@ -340,13 +346,7 @@ function Delete-AzureSQLDatabase
 
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 		$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable dberror
 		if($dberror -ne $null)
@@ -387,13 +387,7 @@ function Delete-AzureSQLServer
 
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 		$f = Get-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable checkserver
 		
@@ -440,13 +434,7 @@ function Delete-AzureSQLServerFirewallRule
 	Try
 	{
 
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
         $d= Get-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction SilentlyContinue -ErrorVariable frerror
         
@@ -487,13 +475,7 @@ function Delete-AzureResourceGroup
 
 	Try
 	{
-		#get current Azure context
-		$context = Get-AzureRmContext -ErrorAction SilentlyContinue -ErrorVariable acerror
-		#Set the context if not already set
-		if($context -eq $null)
-		{
-			Set-AzureProfile -AzureProfilePath $AzureProfilePath
-		}
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 		    
 		$e = Get-AzureRmResourceGroup -Name $resourcegroupname -Location $location -ErrorAction SilentlyContinue -ErrorVariable rgerror
 		if($rgerror -ne $null)
@@ -534,6 +516,8 @@ function Create-AzureStorageAccount
 		[string]$skuname="Standard_LRS"
 
 	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 	$sa = Get-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -ErrorAction SilentlyContinue -ErrorVariable saerror
 	if($sa -ne $null)
@@ -584,6 +568,8 @@ function Create-AzureStorageContainer
 
 	)
 	
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
 	#Set the current storage account
 	Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
 
@@ -615,6 +601,8 @@ function Delete-AzureStorageAccount
 		[string]$resourcegroupname
 		
 	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 	$sa = Get-AzureRmStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -ErrorAction SilentlyContinue -ErrorVariable saerror
 	if($saerror -ne $null)
@@ -655,6 +643,8 @@ function Delete-AzureStorageContainer
 
 	)
 	
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
 	#Set the current storage account
 	Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
 
@@ -698,6 +688,8 @@ function UploadBlob-AzureStorageContainer
 	
 	Try
 	{
+		Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
 		#Set the current storage account
 		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
 
@@ -752,6 +744,8 @@ Function Backup-AzureSQLDatabase
 		[string]$container
 		
 	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 	if($sqlserver.Split('.').Count -le 1)
 	{
@@ -931,6 +925,7 @@ Function Restore-AzureSQLDatabase
 	$sqlservershortname = $sqlserver.Split('.')[0];
 	$sqlserverlongname = "$sqlservershortname.database.windows.net"
 	
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 	#Import bacpac from local system
 	if([string]::IsNullOrEmpty($type) -eq $true)
