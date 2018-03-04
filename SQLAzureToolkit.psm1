@@ -1067,11 +1067,11 @@ Function Restore-AzureSQLDatabase
 	
 	if($replace -eq $true)
 	{
-		Rename-AzureSQLDatabase -sqlservername $sqlservershortname -databasename $database -newdatabasename $newdatabasename -rgn $resourcegroupname
+		Swap-AzureSQLDatabase -sqlservername $sqlservershortname -databasename $database -newdatabasename $newdatabasename -rgn $resourcegroupname
 	}
 }
 
-function Rename-AzureSQLDatabase
+function Swap-AzureSQLDatabase
 {
 	param(
 		[string]$sqlservername,
@@ -1080,7 +1080,7 @@ function Rename-AzureSQLDatabase
 		[string]$rgn
 )
 
-	Add-AzureAccount | Out-Null
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 	$tempdbname = $database + "old" + (Get-Date).ToString("MMddyyyymmss")
 
 	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $sqlservername -ResourceGroupName $rgn -ErrorAction SilentlyContinue -ErrorVariable dberror
@@ -1089,21 +1089,51 @@ function Rename-AzureSQLDatabase
 	
 	if($d -eq $null)
 	{
-		#Original database doesn;t exists. Just rename the new database to original database.
+		#Original database doesn't exists. Just rename the new database to original database.
 		Write-Host "Renaming database $newdatabasename to $databasename" -ForegroundColor Green
 	
-		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewDatabaseName $databasename
+		Set-AzureRmSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewName $databasename
 	}
 	else
 	{
 		#original database exists. Swap the names
 		Write-Host "Renaming database $databasename to $tempdbname" -ForegroundColor Green
-		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $databasename -NewDatabaseName $tempdbname 
+		Set-AzureRmSqlDatabase -ServerName $sqlservername -DatabaseName $databasename -NewName $tempdbname 
 
 		Start-Sleep -s 60
 
 		Write-Host "Renaming database $newdatabasename to $databasename" -ForegroundColor Green
 		Set-AzureSqlDatabase -ServerName $sqlservername -DatabaseName $newdatabasename -NewDatabaseName $databasename
+	}
+	
+}
+
+function Rename-AzureSqlDatabase
+{
+	param (
+		[parameter(Mandatory=$True)]
+		[string]$ServerName,
+		[parameter(Mandatory=$True)]
+		[string]$ResourceGroupName,
+		[parameter(Mandatory=$True)]
+		[string]$DatabaseName,
+		[parameter(Mandatory=$True)]
+		[string]$NewDatabaseName,
+		[string]$AzureProfilePath
+	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
+	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $ServerName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable dberror
+	
+	if($d -ne $null)
+	{
+		Write-Host "Renaming database $DatabaseName to $NewDatabaseName..." -ForegroundColor Green
+	
+		Set-AzureRmSqlDatabase -ServerName $ServerName -DatabaseName $DatabaseName -NewName $NewDatabaseName -ResourceGroupName $ResourceGroupName
+	}else
+	{
+		Write-Host $dberror
 	}
 	
 }
