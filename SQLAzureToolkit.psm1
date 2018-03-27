@@ -60,16 +60,17 @@ function Save-AzureProfile
 function Set-AzureProfile
 {
     param(
+	[AllowEmptyString()]
     [string]$AzureProfilePath
     )
     
     Try
 	{
 		#Login to Azure Account
-		if((Test-Path -Path $AzureProfilePath))
+		if(![string]::IsNullOrEmpty($AzureProfilePath))
 		{
 			#If Azure profile file is available get the profile information from the file
-		    $profile = Select-AzureRmProfile -Path $AzureProfilePath
+		    $profile = Import-AzureRmContext -Path $AzureProfilePath
 			#retrieve the subscription id from the profile.
 		    $SubscriptionID = $profile.Context.Subscription.SubscriptionId
 		}
@@ -1136,4 +1137,117 @@ function Rename-AzureSqlDatabase
 		Write-Host $dberror
 	}
 	
+}
+
+
+function Manage-AzureSQLDBGeoReplication
+{
+	param(
+		[parameter(Mandatory=$true)]
+		[string]$Operation,
+		[parameter(Mandatory=$true)]
+		[string]$ResourceGroupName,
+		[parameter(Mandatory=$true)]
+		[string]$PrimarySQLServer,
+		[parameter(Mandatory=$true)]
+		[string]$SecondarySQLServer,
+		[parameter(Mandatory=$true)]
+		[string]$Sqladminuser,
+		[parameter(Mandatory=$true)]
+		[string]$Sqladminpassword,
+		[parameter(Mandatory=$true)]
+		[string]$SecondaryServerLocation,
+		[parameter(Mandatory=$true)]
+		[string]$Databases, # Comma delimited list of databases to replicate
+		[AllowEmptyString()]
+		[string]$AzureProfilePath
+
+	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath;
+
+	switch($Operation)
+	{
+		#Enable Active Geo Replication
+		Enable 
+		{
+			#verify if primary sql server exists, if not terminate
+			Get-AzureRmSqlServer -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction Stop
+
+			# verify if secondary sql server exists, if not create
+			Get-AzureRmSqlServer -ResourceGroupName $ResourceGroupName -ServerName $SecondarySQLServer -ErrorVariable errorvar -ErrorAction SilentlyContinue
+
+			if($errorvar)
+			{
+				Write-Host "Provisioning SQL Server $SecondarySQLServer..."
+				Create-AzureSQLServer -azuresqlservername $SecondarySQLServer -resourcegroupname $ResourceGroupName `
+					-login $Sqladminuser -password $Sqladminpassword -location $SecondaryServerLocation;
+
+			}
+
+			# Exit if no databases are available for replication
+			if([string]::IsNullOrEmpty($Databases))
+			{
+				Write-Host "No database to replicate" -ForegroundColor Green
+				break;
+			}
+
+			# Replicate individual databases
+			$Databases.Split(',') | ForEach-Object {
+				Write-Host "Replicating database $_ from $PrimarySQLServer to $SecondarySQLServer..." -ForegroundColor Green
+				$db = Get-AzureRmSqlDatabase -DatabaseName $_ -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction SilentlyContinue -ErrorVariable dberror
+				# break if database doesn't exists
+				if($dberror)
+				{
+					Write-Host $dberror -ForegroundColor Red
+					
+				}
+
+				$db | New-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -PartnerServerName $SecondarySqlServer -AllowConnections "No" 
+				
+			}
+
+		}
+
+		# Manual failover to secondary
+		Failover
+		{
+
+			# failover individual databases
+			$Databases.Split(',') | ForEach-Object {
+				Write-Host "Failover database $_ from $PrimarySQLServer to $SecondarySQLServer..." -ForegroundColor Green
+				$db = Get-AzureRmSqlDatabase -DatabaseName $_ -ResourceGroupName $ResourceGroupName -ServerName $SecondarySQLServer -ErrorAction SilentlyContinue -ErrorVariable dberror
+				# break if database doesn't exists
+				if($dberror)
+				{
+					Write-Host $dberror -ForegroundColor Red
+					
+				}
+
+				$db | Set-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -Failover
+				
+			}
+		}
+
+		Disable {
+			# remove individual databases from replication
+			
+			$Databases.Split(',') | ForEach-Object {
+				Write-Host "Remove replication for database $_ ..." -ForegroundColor Green
+				
+				$db = Get-AzureRmSqlDatabase -DatabaseName $_ -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction SilentlyContinue -ErrorVariable dberror
+				# break if database doesn't exists
+				if($dberror)
+				{
+					Write-Host $dberror -ForegroundColor Red
+					
+				}
+
+				$db | Remove-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -ServerName $PrimarySqlServer -PartnerServerName $SecondarySqlServer
+				Write-Host "Disabling replication doesn't removes secondary server and databases. You can remove them using Delete-AzureSqlServer and Delete-AzureSqlDatabase cmdlets";
+			}
+		}
+	}
+
+
 }
