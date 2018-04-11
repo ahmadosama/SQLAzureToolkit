@@ -1,5 +1,6 @@
 function fn_executeprocess
 {
+
 	param
 	(
 		[string]$filename, 
@@ -102,6 +103,7 @@ function Set-AzureProfile
 #>
 function Create-AzureResourceGroup
 {
+
     param(
     [string]$AzureProfilePath,
     [Parameter(Mandatory=$true)]
@@ -125,7 +127,7 @@ function Create-AzureResourceGroup
 		if($rgerror -ne $null)
 		{
 			Write-host "Provisioning Azure Resource Group $resourcegroupname... " -ForegroundColor Green
-			New-AzureRmResourceGroup -Name $resourcegroupname -Location $location
+			New-AzureRmResourceGroup -Name $resourcegroupname -Location $location -ErrorAction Stop
 			Write-host "$resourcegroupname provisioned." -ForegroundColor Green
 		}
 	
@@ -178,7 +180,7 @@ function Create-AzureSQLServer
 		{ 
 			#create a sql server
 			Write-host "Provisioning Azure SQL Server $azuresqlservername ... " -ForegroundColor Green
-			New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force) -ErrorVariable errorvar)
+			New-AzureRmSqlServer -ResourceGroupName $resourcegroupname -ServerName $azuresqlservername -Location $location -SqlAdministratorCredentials $(New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $login, $(ConvertTo-SecureString -String $password -AsPlainText -Force) -ErrorAction Stop)
 			<#
 			if(!$errorvar)
 			{
@@ -192,6 +194,7 @@ function Create-AzureSQLServer
 	    $FailedItem = $_.Exception.ItemName
 		Write-host $ErrorMessage $FailedItem
 	}
+
 
 }
 
@@ -308,11 +311,11 @@ function Create-AzureSQLDatabase
 			Write-Host "Provisioning $databasename..." -ForegroundColor Green
 			if([string]::IsNullOrEmpty($elasticpool) -eq $true)
 			{
-				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier
+				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ErrorAction Stop
 			}
 			else
 			{
-				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ElasticPoolName $elasticpool 
+				New-AzureRmSqlDatabase  -ResourceGroupName $resourcegroupname  -ServerName $azuresqlservername -DatabaseName $databasename -RequestedServiceObjectiveName $pricingtier -ElasticPoolName $elasticpool -ErrorAction Stop
 			}
 	
 		}
@@ -335,6 +338,7 @@ function Create-AzureSQLDatabase
 #>
 function Delete-AzureSQLDatabase
 {
+
 	param(
 		[string]$AzureProfilePath,
 		[Parameter(Mandatory=$true)]
@@ -359,7 +363,7 @@ function Delete-AzureSQLDatabase
 		if($d -ne $null)
 		{
 			Write-Host "Deleting Azure SQL Database $databasename already exists in Server $azuresqlservername..." -ForegroundColor Green
-			Remove-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname
+			Remove-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction Stop
 		}
 		
 
@@ -371,6 +375,7 @@ function Delete-AzureSQLDatabase
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}
 }
+
 
 <#
 	Delete-AzureSQLServer
@@ -403,7 +408,7 @@ function Delete-AzureSQLServer
 		if($f -ne $null)
 		{
 			Write-Host "Deleting Azure SQL Server $azuresqlservername" -ForegroundColor Green
-			Remove-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname
+			Remove-AzureRmSqlServer -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction Stop
 			return;
 		}
 
@@ -414,6 +419,7 @@ function Delete-AzureSQLServer
 	    $FailedItem = $_.Exception.ItemName
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}
+
 }
 
 <#
@@ -447,7 +453,7 @@ function Delete-AzureSQLServerFirewallRule
         if($d -ne $null)
         {
 			Write-Host "Deleting Azure SQL Server Firewall Rule $rulename" -ForegroundColor Green
-            Remove-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname
+            Remove-AzureRmSqlServerFirewallRule -FirewallRuleName $rulename -ServerName $azuresqlservername -ResourceGroupName $resourcegroupname -ErrorAction Stop
         }
 
 	}
@@ -457,6 +463,7 @@ function Delete-AzureSQLServerFirewallRule
 	    $FailedItem = $_.Exception.ItemName
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}
+
 }
 
 
@@ -487,7 +494,7 @@ function Delete-AzureResourceGroup
 		if($e -ne $null)
 		{
 			Write-Host "Deleting Azure Resource Group $resourcegroupname" -ForegroundColor Green
-			Remove-AzureRmResourceGroup -Name $resourcegroupname
+			Remove-AzureRmResourceGroup -Name $resourcegroupname -ErrorAction Stop
 		}
 
 	}
@@ -497,6 +504,7 @@ function Delete-AzureResourceGroup
 	    $FailedItem = $_.Exception.ItemName
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}
+
 }
 
 
@@ -549,6 +557,7 @@ function Create-AzureStorageAccount
 		}
 	}
 
+
 }
 
 <#
@@ -557,6 +566,7 @@ function Create-AzureStorageAccount
 #>
 function Create-AzureStorageContainer
 {
+
 	param(
 		[Parameter(Mandatory=$true)]
 		[string]$storageaccountname,
@@ -595,6 +605,7 @@ function Create-AzureStorageContainer
 #>
 function Delete-AzureStorageAccount
 {
+
 	param(
 		[Parameter(Mandatory=$true)]
 		[string]$storageaccountname,
@@ -692,12 +703,12 @@ function UploadBlob-AzureStorageContainer
 		Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 		#Set the current storage account
-		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname -ErrorAction Stop
 
 		#upload blob to Azure Storage Container
 		if([string]::IsNullOrEmpty($file) -eq $false)
 		{
-			Set-AzureStorageBlobContent -File $file -Container $containername -Blob $blobname
+			Set-AzureStorageBlobContent -File $file -Container $containername -Blob $blobname -ErrorAction Stop
 		}
 		if([string]::IsNullOrEmpty($directory) -eq $false)
 		{
@@ -711,6 +722,7 @@ function UploadBlob-AzureStorageContainer
 	    $FailedItem = $_.Exception.ItemName
 		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
 	}	
+
 
 }
 
@@ -851,7 +863,7 @@ Function Backup-AzureSQLDatabase
 		
 		# set the bacpac location
 		$bloblocation = "https://$storageaccountname.blob.core.windows.net/$container/$bacpacFilename"
-		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname
+		Set-AzureRmCurrentStorageAccount -StorageAccountName $storageaccountname -ResourceGroupName $resourcegroupname -ErrorAction Stop
 		#set the credential
 		$securesqlpassword = ConvertTo-SecureString -String $sqlpassword -AsPlainText -Force
 		$credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqluser, $securesqlpassword
@@ -880,6 +892,7 @@ Function Backup-AzureSQLDatabase
 		}
 		
 	}	
+
 
 }
 
@@ -1165,7 +1178,8 @@ function Manage-AzureSQLDBGeoReplication
 	)
 
 	Set-AzureProfile -AzureProfilePath $AzureProfilePath;
-
+	try
+	{
 	switch($Operation)
 	{
 		#Enable Active Geo Replication
@@ -1175,15 +1189,11 @@ function Manage-AzureSQLDBGeoReplication
 			Get-AzureRmSqlServer -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction Stop
 
 			# verify if secondary sql server exists, if not create
-			Get-AzureRmSqlServer -ResourceGroupName $ResourceGroupName -ServerName $SecondarySQLServer -ErrorVariable errorvar -ErrorAction SilentlyContinue
-
-			if($errorvar)
-			{
-				Write-Host "Provisioning SQL Server $SecondarySQLServer..."
-				Create-AzureSQLServer -azuresqlservername $SecondarySQLServer -resourcegroupname $ResourceGroupName `
+			Write-Host "Provisioning SQL Server $SecondarySQLServer..."
+			Create-AzureSQLServer -azuresqlservername $SecondarySQLServer -resourcegroupname $ResourceGroupName `
 					-login $Sqladminuser -password $Sqladminpassword -location $SecondaryServerLocation;
 
-			}
+			
 
 			# Exit if no databases are available for replication
 			if([string]::IsNullOrEmpty($Databases))
@@ -1203,7 +1213,7 @@ function Manage-AzureSQLDBGeoReplication
 					
 				}
 
-				$db | New-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -PartnerServerName $SecondarySqlServer -AllowConnections "No" 
+				$db | New-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -PartnerServerName $SecondarySqlServer -AllowConnections "No"  -ErrorAction Stop
 				
 			}
 
@@ -1224,7 +1234,7 @@ function Manage-AzureSQLDBGeoReplication
 					
 				}
 
-				$db | Set-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -Failover
+				$db | Set-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -Failover -ErrorAction Stop 
 				
 			}
 		}
@@ -1243,11 +1253,138 @@ function Manage-AzureSQLDBGeoReplication
 					
 				}
 
-				$db | Remove-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -ServerName $PrimarySqlServer -PartnerServerName $SecondarySqlServer
+				$db | Remove-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -ServerName $PrimarySqlServer -PartnerServerName $SecondarySqlServer -ErrorAction Stop
 				Write-Host "Disabling replication doesn't removes secondary server and databases. You can remove them using Delete-AzureSqlServer and Delete-AzureSqlDatabase cmdlets";
 			}
 		}
 	}
+		}catch
+	{
+		Write-host $_ -ForegroundColor Red
+	}
 
 
+
+}
+
+function Manage-FailoverGroup
+{
+	param(
+		[parameter(Mandatory=$true)]
+		[string]$Operation,
+		[parameter(Mandatory=$true)]
+		[string]$ResourceGroupName,
+		[parameter(Mandatory=$true)]
+		[string]$PrimarySQLServer,
+		[parameter(Mandatory=$true)]
+		[string]$SecondarySQLServer,
+		[parameter(Mandatory=$true)]
+		[string]$Sqladminuser,
+		[parameter(Mandatory=$true)]
+		[string]$Sqladminpassword,
+		[parameter(Mandatory=$true)]
+		[string]$SecondaryServerLocation,
+		[parameter(Mandatory=$true)]
+		[string]$FailoverGroupName,
+		[parameter(Mandatory=$false)]
+		[int]$GracePeriodWithDataLossHours=1,
+		[parameter(Mandatory=$true)]
+		[string]$Databases, # Comma delimited list of databases to replicate
+		[AllowEmptyString()]
+		[string]$AzureProfilePath
+	)
+	
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath;
+	
+	#verify if primary sql server exists, if not terminate
+	Get-AzureRmSqlServer -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction Stop
+	try
+	{
+		Switch($Operation)
+		{
+			Enable
+			{
+
+			#Create Secondary Server if it doesn't exists
+			Create-AzureSQLServer -AzureProfilePath $AzureProfilePath `
+			-azuresqlservername $SecondarySQLServer `
+			-resourcegroupname $ResourceGroupName `
+			-login $Sqladminuser `
+			-password $Sqladminpassword `
+			-location $SecondaryServerLocation
+
+			#Create failover group
+			Write-Host "Creating the failover group $FailoverGroupName " -ForegroundColor Green
+			$failovergroup = New-AzureRMSqlDatabaseFailoverGroup -ResourceGroupName $ResourceGroupName `
+			-ServerName $PrimarySQLServer `
+			-PartnerServerName $SecondarySQLServer `
+			-FailoverGroupName $FailoverGroupName `
+			-FailoverPolicy Automatic `
+			-GracePeriodWithDataLossHours 1 `
+			-ErrorAction stop
+			#Add databases to the failover group
+			# Replicate individual databases
+			$Databases.Split(',') | ForEach-Object {
+				Write-Host "Adding database $_ from to failover group $FailoverGroupName..." -ForegroundColor Green
+				$db = Get-AzureRmSqlDatabase -DatabaseName $_ -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction SilentlyContinue -ErrorVariable dberror
+				# break if database doesn't exists
+				if($dberror)
+				{
+					Write-Host $dberror -ForegroundColor Red
+					
+				}
+
+				$db | Add-AzureRmSqlDatabaseToFailoverGroup -ServerName $PrimarySQLServer -FailoverGroupName $FailoverGroupName -ResourceGroupName $ResourceGroupName  -ErrorAction stop
+								
+			}
+		}
+			Failover
+			{
+				#Failover the failover group to the secondary server.
+				#Failover group can do an automatic failover. 
+				Write-Host "Failing over to the secondary server..."
+				Switch-AzureRMSqlDatabaseFailoverGroup -ResourceGroupName $ResourceGroupName -ServerName $SecondarySQLServer -FailoverGroupName $FailoverGroupName -ErrorAction stop
+			}
+
+			Disable
+			{
+				#Remove individual databases from the failover group
+				$Databases.Split(',') | ForEach-Object {
+				Write-Host "Removing database $_ from the failover group $FailoverGroupName..." -ForegroundColor Green
+				
+				$db = Get-AzureRmSqlDatabase -DatabaseName $_ -ResourceGroupName $ResourceGroupName -ServerName $PrimarySQLServer -ErrorAction SilentlyContinue -ErrorVariable dberror
+				# break if database doesn't exists
+				if($dberror)
+				{
+					Write-Host $dberror -ForegroundColor Red
+					
+				}
+				#Remove database from the failover group
+				$db | Remove-AzureRmSqlDatabaseFailoverGroup -ServerName $PrimarySQLServer -FailoverGroupName $FailoverGroupName -ErrorAction Stop
+				#Remove the replicatin link
+				$db | Remove-AzureRmSqlDatabaseSecondary -PartnerResourceGroupName $ResourceGroupName -ServerName $PrimarySqlServer -PartnerServerName $SecondarySqlServer -ErrorAction Stop
+				Write-Host "Disabling replication doesn't removes secondary server and databases. You can remove them using Delete-AzureSqlServer and Delete-AzureSqlDatabase cmdlets";
+
+				#delete the failover group
+			}
+			
+			}
+			Remove
+			{
+				#delete failovergroup.
+				Remove-AzureRmSqlDatabaseFailoverGroup -ServerName $PrimarySQLServer -FailoverGroupName $FailoverGroupName -ResourceGroupName $ResourceGroupName -ErrorAction Stop
+			}
+		}
+		
+	}
+	catch
+	{
+		$ErrorMessage = $_.Exception.Message
+	    $FailedItem = $_.Exception.ItemName
+		Write-host $ErrorMessage $FailedItem -ForegroundColor Red
+	}
+
+	
+		
+	
 }
