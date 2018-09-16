@@ -1388,3 +1388,54 @@ function Manage-FailoverGroup
 		
 	
 }
+
+function Modify-AzureSqlDatabase
+{
+	param(
+		
+		[parameter(Mandatory=$True)]
+		[string]$ServerName,
+		[parameter(Mandatory=$True)]
+		[string]$ResourceGroupName,
+		[parameter(Mandatory=$True)]
+		[string]$DatabaseName,
+		[parameter(Mandatory=$false)]
+		[string]$NewEdition,
+		[parameter(Mandatory=$False)]
+		[string]$NewServiceObjective,
+		[parameter(Mandatory=$False)]
+		[string]$NewDatabaseName,
+		[parameter(Mandatory=$False)]
+		[string]$AzureProfilePath,
+		[parameter(Mandatory=$false)]
+		[switch]$ChangeEdition,
+		[parameter(Mandatory=$false)]
+		[switch]$RenameDatabase
+		
+	)
+
+	Set-AzureProfile -AzureProfilePath $AzureProfilePath
+
+	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $ServerName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable dberror
+	
+	if($d -eq $null)
+	{
+		Write-Host $dberror
+		break;
+	}
+	#Rename database
+	if($RenameDatabase)
+	{
+		Write-Host "Renaming database $DatabaseName to $NewDatabaseName..." -ForegroundColor Green
+		Set-AzureRmSqlDatabase -ServerName $ServerName -DatabaseName $DatabaseName -NewName $NewDatabaseName -ResourceGroupName $ResourceGroupName
+	}
+
+	if($ChangeEdition)
+	{
+		Write-Host "Modifying edition of $DatabaseName to $NewEdition..." -ForegroundColor Green
+		$d | Set-AzureRmSqlDatabase -Edition $NewEdition -RequestedServiceObjectiveName $NewServiceObjective
+
+	}
+
+	
+}
