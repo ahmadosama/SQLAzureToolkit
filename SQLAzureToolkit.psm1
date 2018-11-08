@@ -754,7 +754,9 @@ Function Backup-AzureSQLDatabase
 		[Parameter(Mandatory=$false)]
 		[string]$resourcegroupname,
 		[Parameter(Mandatory=$false)]
-		[string]$container
+		[string]$container,
+		[Parameter(Mandatory=$false)]
+		[string]$AzureProfilePath
 		
 	)
 
@@ -1410,14 +1412,18 @@ function Modify-AzureSqlDatabase
 		[parameter(Mandatory=$false)]
 		[switch]$ChangeEdition,
 		[parameter(Mandatory=$false)]
-		[switch]$RenameDatabase
+		[switch]$RenameDatabase,
+		[parameter(Mandatory=$false)]
+		[switch]$SetAdminPassword,
+		[parameter(Mandatory=$false)]
+		[switch]$NewAdminPassword
 		
 	)
 
 	Set-AzureProfile -AzureProfilePath $AzureProfilePath
 
 	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $ServerName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable dberror
-	
+	$s = Get-AzureRmSqlServer -ServerName $ServerName -ResourceGroupName $ResourceGroupName
 	if($d -eq $null)
 	{
 		Write-Host $dberror
@@ -1437,5 +1443,10 @@ function Modify-AzureSqlDatabase
 
 	}
 
+	if($SetAdminPassword)
+	{
+		Write-Host "Modifying Administrator Password for Database $DatabaseName.." -ForegroundColor Green
+		$s| Set-AzureRmSqlServer -SqlAdministratorPassword (ConvertTo-SecureString -String $NewAdminPassword)
+	}
 	
 }
