@@ -2,8 +2,11 @@
 PowerShell module to perform Administrative tasks for Azure SQL Database
 
 Download and copy the module to your module directory. To find out the default module directory execute the below powershell command
+
 $env:PSModulePath
+
 Import the module using the below command
+
 Import-Module SQLAzureToolKit
 
 Provision a new Azure SQL Database
