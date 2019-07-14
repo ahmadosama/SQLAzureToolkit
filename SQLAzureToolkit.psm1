@@ -45,7 +45,7 @@ function Save-AzureProfile
 		[string]$AzureProfilePath
 	)
 	Write-Host "Login to your Azure Account" -ForegroundColor Green
-	Login-AzureRmAccount | Save-AzureRmProfile -Path $AzureProfilePath -Force -ErrorVariable errorvar
+	Login-AzAccount | Save-AzProfile -Path $AzureProfilePath -Force -ErrorVariable errorvar
 	if(!$errorvar)
 	{
 		Write-Host "Azure Profile details saved in $AzureProfilePath. You can now use it to login to Azure PowerShell." -ForegroundColor Green
@@ -71,7 +71,7 @@ function Set-AzureProfile
 		if(![string]::IsNullOrEmpty($AzureProfilePath))
 		{
 			#If Azure profile file is available get the profile information from the file
-		    $profile = Import-AzureRmContext -Path $AzureProfilePath
+		    $profile = Import-AzContext -Path $AzureProfilePath
 			#retrieve the subscription id from the profile.
 		    $SubscriptionID = $profile.Context.Subscription.SubscriptionId
 		}
@@ -81,12 +81,13 @@ function Set-AzureProfile
 			
 			# If the Azure Profile file isn't available, login using the dialog box.
 		    # Provide your Azure Credentials in the login dialog box
-		    $profile = Login-AzureRmAccount
+		    $profile = Login-AzAccount
 		    $SubscriptionID =  $profile.Context.Subscription.SubscriptionId
 		}
 
 		#Set the Azure Context
 		Set-AzureRmContext -SubscriptionId $SubscriptionID | Out-Null
+		Write-Host "SubscriptionId: $SubscriptionID"
 	}
 	catch{
 		$ErrorMessage = $_.Exception.Message
@@ -522,7 +523,9 @@ function Create-AzureStorageAccount
 		[Parameter(Mandatory=$true)]
 		[string]$location,
 		[Parameter(Mandatory=$false)]
-		[string]$skuname="Standard_LRS"
+		[string]$skuname="Standard_LRS",
+		[Parameter(Mandatory=$false)]
+		[string]$AzureProfilePath
 
 	)
 
@@ -575,7 +578,9 @@ function Create-AzureStorageContainer
 		[Parameter(Mandatory=$true)]
 		[string]$containername,
 		[Parameter(Mandatory=$false)]
-		[string]$permission="Off"
+		[string]$permission="Off",
+		[Parameter(Mandatory=$false)]
+		[string]$AzureProfilePath
 
 	)
 	
@@ -610,7 +615,9 @@ function Delete-AzureStorageAccount
 		[Parameter(Mandatory=$true)]
 		[string]$storageaccountname,
 		[Parameter(Mandatory=$true)]
-		[string]$resourcegroupname
+		[string]$resourcegroupname,
+		[Parameter(Mandatory=$false)]
+		[string]$AzureProfilePath
 		
 	)
 
@@ -651,7 +658,9 @@ function Delete-AzureStorageContainer
 		[Parameter(Mandatory=$true)]
 		[string]$resourcegroupname,
 		[Parameter(Mandatory=$true)]
-		[string]$containername
+		[string]$containername,
+		[Parameter(Mandatory=$false)]
+		[string]$AzureProfilePath
 
 	)
 	
@@ -1399,7 +1408,7 @@ function Modify-AzureSqlDatabase
 		[string]$ServerName,
 		[parameter(Mandatory=$True)]
 		[string]$ResourceGroupName,
-		[parameter(Mandatory=$True)]
+		[parameter(Mandatory=$False)]
 		[string]$DatabaseName,
 		[parameter(Mandatory=$false)]
 		[string]$NewEdition,
@@ -1416,19 +1425,19 @@ function Modify-AzureSqlDatabase
 		[parameter(Mandatory=$false)]
 		[switch]$SetAdminPassword,
 		[parameter(Mandatory=$false)]
-		[switch]$NewAdminPassword
+		[string]$NewAdminPassword
 		
 	)
 
 	Set-AzureProfile -AzureProfilePath $AzureProfilePath
-
-	$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $ServerName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable dberror
-	$s = Get-AzureRmSqlServer -ServerName $ServerName -ResourceGroupName $ResourceGroupName
-	if($d -eq $null)
+	
+	if($DatabaseName.Length -gt 0)
 	{
-		Write-Host $dberror
-		break;
+		$d = Get-AzureRmSqlDatabase -DatabaseName $databasename -ServerName $ServerName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue -ErrorVariable dberror
 	}
+
+	$s = Get-AzureRmSqlServer -ServerName $ServerName -ResourceGroupName $ResourceGroupName
+	
 	#Rename database
 	if($RenameDatabase)
 	{
@@ -1445,8 +1454,91 @@ function Modify-AzureSqlDatabase
 
 	if($SetAdminPassword)
 	{
-		Write-Host "Modifying Administrator Password for Database $DatabaseName.." -ForegroundColor Green
-		$s| Set-AzureRmSqlServer -SqlAdministratorPassword (ConvertTo-SecureString -String $NewAdminPassword)
+		Write-Host "Modifying Administrator Password for Server $ServerName.." -ForegroundColor Green
+		$s| Set-AzureRmSqlServer -SqlAdministratorPassword (ConvertTo-SecureString -String $NewAdminPassword -AsPlainText -Force)
 	}
 	
+}
+
+function Enable-AzureSqlDatabaseDiagnosticLogs
+{
+param
+	(
+		[string]$diagnosticsettingname="LogEverything",
+		[string]$resourcegroupname,
+		[string]$servername,
+		[string]$databasename,
+		[string]$storageaccountname,
+		[switch]$createstorageaccount,
+		[string]$Logs,
+		[string]$metric="Basic",
+		[boolean]$enable,
+		[switch]$all,
+		[switch]$enableretention,
+		[int]$retentiondays=10,
+		[string]$AzureProfilePath
+
+)
+
+
+Set-AzureProfile -AzureProfilePath $AzureProfilePath
+$_enableretention = $False
+if($enableretention)
+{ $_enableretention = $True }
+
+$categories = New-Object System.Collections.Generic.List[string]
+foreach($category in $logs.Split(","))
+{
+    $categories.Add($category)
+    
+}
+
+#get azure sql database id 
+$SqlResource = Get-AzSqlDatabase -DatabaseName $databasename -ServerName $servername -ResourceGroupName $resourcegroupname
+
+if($createstorageaccount)
+{
+    $storageaccountname = $storageaccountname + (Get-Random).ToString()
+    $containername = "sqldiagnosticlogs"+(Get-Random).ToString()
+    Create-AzureStorageAccount -storageaccountname $storageaccountname `
+    -resourcegroupname $resourcegroupname `
+    -location $SqlResource.Location `
+    -skuname "Standard_LRS" `
+    -AzureProfilePath E:\SQLAzureToolkit\MyAzureProfile.json
+
+}
+
+$Storageaccountid = (Get-AzStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname).Id
+
+
+#enable all metric and log
+if($all -eq $true)
+{
+    $ds = Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
+    -Name $diagnosticsettingname `
+    -StorageAccountId $Storageaccountid `
+    -Enabled $enable `
+    -RetentionInDays $retentiondays `
+    -RetentionEnabled $_enableretention
+
+
+
+}else
+{
+     $ds = Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
+     -Name $diagnosticsettingname `
+     -StorageAccountId $Storageaccountid `
+     -Category $categories `
+     -MetricCategory $metric `
+     -Enabled $enable `
+     -RetentionInDays $retentiondays `
+     -RetentionEnabled $_enableretention
+
+}
+
+#display the logged categories
+#$ds = Get-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId -Name $diagnosticsettingname
+$ds.StorageAccountId
+$ds.Logs | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
+$ds.Metrics | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
 }
