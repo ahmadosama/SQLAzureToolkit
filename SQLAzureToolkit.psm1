@@ -1556,7 +1556,7 @@ if(![string]::IsNullOrEmpty($loganalyticsworkspacename))
 	$ws = Get-AzOperationalInsightsWorkspace -ResourceGroupName $SqlResource.ResourceGroupName -Name $loganalyticsworkspacename
 	#set diagnostic setting
 	Write-host "Create Diagnostic Setting.." -ForegroundColor Green
-	Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
+	$ds = Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
 	-Name $diagnosticsettingname `
 	-WorkspaceId $ws.ResourceId `
 	-Enabled $True `
@@ -1565,7 +1565,6 @@ if(![string]::IsNullOrEmpty($loganalyticsworkspacename))
 }
 #display the logged categories
 #$ds = Get-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId -Name $diagnosticsettingname
-$ds.StorageAccountId
 $ds.Logs | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
 $ds.Metrics | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
 
