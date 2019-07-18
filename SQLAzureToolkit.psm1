@@ -721,7 +721,7 @@ function UploadBlob-AzureStorageContainer
 		}
 		if([string]::IsNullOrEmpty($directory) -eq $false)
 		{
-			ls –Recurse -Path $directory | Set-AzureStorageBlobContent -Container $containername -Force
+			ls ï¿½Recurse -Path $directory | Set-AzureStorageBlobContent -Container $containername -Force
 		}
 		
 	}
@@ -1476,16 +1476,13 @@ param
 		[switch]$all,
 		[switch]$enableretention,
 		[int]$retentiondays=10,
+		[string]$loganalyticsworkspacename,
+		[switch]$createloganalyticsws,
 		[string]$AzureProfilePath
 
 )
 
-
 Set-AzureProfile -AzureProfilePath $AzureProfilePath
-$_enableretention = $False
-if($enableretention)
-{ $_enableretention = $True }
-
 $categories = New-Object System.Collections.Generic.List[string]
 foreach($category in $logs.Split(","))
 {
@@ -1496,10 +1493,16 @@ foreach($category in $logs.Split(","))
 #get azure sql database id 
 $SqlResource = Get-AzSqlDatabase -DatabaseName $databasename -ServerName $servername -ResourceGroupName $resourcegroupname
 
+if(![string]::IsNullOrEmpty($storageaccountname))
+{
+
+$_enableretention = $False
+if($enableretention)
+{ $_enableretention = $True }
+
 if($createstorageaccount)
 {
     $storageaccountname = $storageaccountname + (Get-Random).ToString()
-    $containername = "sqldiagnosticlogs"+(Get-Random).ToString()
     Create-AzureStorageAccount -storageaccountname $storageaccountname `
     -resourcegroupname $resourcegroupname `
     -location $SqlResource.Location `
@@ -1536,9 +1539,34 @@ if($all -eq $true)
 
 }
 
+
+}
+if(![string]::IsNullOrEmpty($loganalyticsworkspacename))
+{
+	$loganalyticsworkspacename = $loganalyticsworkspacename + (Get-Random).ToString()
+	#create analytics 
+	if($createloganalyticsws)
+	{
+		Write-Host "Creating log analytics workspace $loganalyticsworkspacename.." -ForegroundColor Green
+		 New-AzOperationalInsightsWorkspace -ResourceGroupName $SqlResource.ResourceGroupName `
+		-Name $loganalyticsworkspacename `
+		-Location $SqlResource.Location `
+		-Sku "Standard"
+	}
+	$ws = Get-AzOperationalInsightsWorkspace -ResourceGroupName $SqlResource.ResourceGroupName -Name $loganalyticsworkspacename
+	#set diagnostic setting
+	Write-host "Create Diagnostic Setting.." -ForegroundColor Green
+	Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
+	-Name $diagnosticsettingname `
+	-WorkspaceId $ws.ResourceId `
+	-Enabled $True `
+	-Category $categories
+
+}
 #display the logged categories
 #$ds = Get-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId -Name $diagnosticsettingname
 $ds.StorageAccountId
 $ds.Logs | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
 $ds.Metrics | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
+
 }
