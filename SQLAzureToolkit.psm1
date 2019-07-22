@@ -1478,6 +1478,10 @@ param
 		[int]$retentiondays=10,
 		[string]$loganalyticsworkspacename,
 		[switch]$createloganalyticsws,
+		[string]$NamespaceName,
+		[string]$eventhubname,
+		[switch]$CreateEventHub,
+		[string]$evenhubrulename,
 		[string]$AzureProfilePath
 
 )
@@ -1563,9 +1567,70 @@ if(![string]::IsNullOrEmpty($loganalyticsworkspacename))
 	-Category $categories
 
 }
-#display the logged categories
-#$ds = Get-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId -Name $diagnosticsettingname
-$ds.Logs | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
-$ds.Metrics | Where-Object { $_.Enabled -eq "True" } | Select Category,Enabled | Format-Table
+
+if(![string]::IsNullOrEmpty($eventhubname))
+{
+	if($CreateEventHub)
+	{
+		Create-AzureEventhub -ResourceGroupName $resourcegroupname `
+		-NamespaceName $NamespaceName `
+		-EventHubName $eventhubname `
+		-location $SqlResource.Location `
+		-MessageRetentionDays 3 `
+		-eventhubrulename $evenhubrulename `
+		-ErrorAction SilentlyContinue `
+		-ErrorVariable $ehuberror
+		
+
+	}
+	Write-Host "Adding Diagnostic Setting..."
+	sleep -Seconds 10
+	#get evenhub rule id 
+	$ehubrule = Get-AzEventHubAuthorizationRule -ResourceGroupName $resourcegroupname -Namespace $NamespaceName -Name $evenhubrulename
+	#Write-host $ehubrule.Id[0]
+	$ds=Set-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId `
+	-Name $diagnosticsettingname `
+	-EventHubName $eventhubname `
+	-EventHubAuthorizationRuleId $ehubrule.Id `
+	-Category $categories `
+	-Enabled $true `
 
 }
+
+#display the logged categories
+#$ds = Get-AzDiagnosticSetting -ResourceId $SqlResource.ResourceId -Name $diagnosticsettingname
+$ds.Logs | Where-Object { $_.Enabled -eq "True" } | Select-Object Category,Enabled | Format-Table
+$ds.Metrics | Where-Object { $_.Enabled -eq "True" } | Select-Object Category,Enabled | Format-Table
+
+}
+
+# create azure event hub
+function Create-AzureEventhub
+{
+	param(
+		[string]$ResourceGroupName,
+		[string]$NamespaceName,
+		[string]$location,
+		[string]$EventHubName,
+		[string]$eventhubrulename,
+		[int]$MessageRetentionDays=3
+	)
+
+	Write-Host "Creating Event hub..." -ForegroundColor Green
+	#create event hub namespace
+	New-AzEventHubNamespace -ResourceGroupName $ResourceGroupName `
+	-NamespaceName $NamespaceName `
+	-Location $location
+
+	New-AzEventHub -ResourceGroupName $ResourceGroupName `
+	-NamespaceName $NamespaceName `
+	-EventHubName $EventHubName `
+	-MessageRetentionInDays $MessageRetentionDays
+
+	Set-AzEventHubAuthorizationRule -ResourceGroupName $ResourceGroupName `
+	-Namespace $NamespaceName `
+	-Name $eventhubrulename `
+	-Rights Listen,Manage,Send
+
+	#-EventHub $EventHubName `
+}	
